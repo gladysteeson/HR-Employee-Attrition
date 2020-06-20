@@ -11,6 +11,9 @@ if(!require(pROC)) install.packages("pROC", repos = "http://cran.us.r-project.or
 if(!require(xgboost)) install.packages("xgboost", repos = "http://cran.us.r-project.org")
 if(!require(DMwR)) install.packages("DMwR", repos = "http://cran.us.r-project.org")
 
+#IBM Dataset
+#https://www.kaggle.com/pavansubhasht/ibm-hr-analytics-attrition-dataset
+
 ## Import the dataset 
 data = read.csv("https://raw.githubusercontent.com/gladysteeson/HR-Employee-Attrition/master/HR-Employee-Attrition.csv") 
 
@@ -19,9 +22,6 @@ str(data)
 
 # number of rows and columns in the dataset
 dim(data)
-
-# the first 6 rows of the data
-head(data)
 
 ## Pre-process the data
 
@@ -45,14 +45,6 @@ data$DailyRate <- NULL
 dim(data)
 
 ## Analyse the data
-
-# examine the Age distribution
-Age <- data$Age
-hist(Age)
-
-# examine the Gender distribution
-Gender <- data$Gender
-plot(Gender)
 
 # Attrition by Age 
 ggplot(data, aes(x=Age, fill=Attrition, color=Attrition)) +
@@ -93,11 +85,11 @@ ggplot(data, aes(x=MonthlyIncome, fill=Attrition, color=Attrition)) +
   labs(x = "MonthlyIncome") 
 
 
-# Department by Monthly Income and Attrition
+# Attrition by Monthly Income and Department
 ggplot(data,aes(MonthlyIncome,Department, color=Attrition))+geom_point() + scale_color_manual(values=c("chartreuse4", "brown2"))
 
 
-# Job Roles by Monthly Income by Attrition
+# Attrition by Monthly Income and Job Role
 ggplot(data,aes(MonthlyIncome,JobRole, color=Attrition))+geom_point() + scale_color_manual(values=c("chartreuse4", "brown2"))
 
 
@@ -177,20 +169,12 @@ corrplot(cor(sapply(data,as.integer)),method = "color")
 
 ## Transform the data
 
-# examine the structure of data
-str(data)
+# convert every variables into numeric
+data <- data %>% mutate_if(is.factor, as.integer)
 
-# discretize the variables
-data$Age <- discretize(data$Age, method = "interval",breaks = 4, labels = c("Young","Thirties","Forties","Old"))
-data$HourlyRate <- discretize(data$HourlyRate, method = "interval",breaks = 7, labels = c("30-40","40-50","50-60","60-70","70-80","80-90","80-100"))
-data$DistanceFromHome <- discretize(data$DistanceFromHome, method = "interval",breaks = 6, labels = c("1-5","6-10","11-15","16-20","21-25","26-30"))
-data$PercentSalaryHike <- discretize(data$PercentSalaryHike, method = "interval",breaks = 3, labels = c("11%-15%","16%-20%","21%-25%"))
-data$YearsWithCurrManager <- discretize(data$YearsWithCurrManager, method = "interval", breaks = 6, labels  = c('0-3','4-6','7-9','10-12','13-15','16-18'))
-data$MonthlyIncome <- discretize(data$MonthlyIncome, method = 'interval')
-data$MonthlyRate <- discretize(data$MonthlyRate, method = 'interval', breaks = 4)
-
-# convert every variables into categorical type
-data <- data %>% mutate_if(is.integer, as.factor)
+# convert the target variable Attrition to factor 
+data$Attrition=ifelse(data$Attrition==1,"No","Yes")
+data$Attrition <- factor(data$Attrition)
 
 # list types for each attribute
 sapply(data, class)
@@ -213,7 +197,6 @@ tr_control <- trainControl(method = 'cv', number = 5, classProbs = T)
 logR_model = train(Attrition~., data=data_train
                      , method="glm"
                      , family = "binomial"
-                     ,metric="ROC"
                      , trControl=tr_control)
 
 # predict using the Logistic Regression Model
@@ -225,10 +208,6 @@ predict_logR <- predict(logR_model
 confusionMatrix(as.factor(predict_logR), as.factor(data_test$Attrition))
 LogR_Model_auc <- auc(as.numeric(data_test$Attrition), as.numeric(predict_logR))
 LogR_Model_auc
-
-# plot roc curve
-plot.roc(as.numeric(data_test$Attrition), as.numeric(predict_logR)
-         ,  main = 'Logistic Regression', col='darkseagreen4', print.auc = T)
 
 # add auc results in a table 
 auc_results <- data.frame(method = "LogR_Model", auc = as.numeric(LogR_Model_auc)) 
@@ -242,7 +221,6 @@ tr_control <- trainControl(method = 'cv', number = 5, classProbs = T)
 # fit the Basic Random Forest Model
 RF_model_1 = train(Attrition~., data=data_train
                    , method="rf"
-                   , metric="ROC"
                    , trControl=tr_control)
 
 
@@ -255,10 +233,6 @@ predict_RF1 <- predict(RF_model_1
 confusionMatrix(as.factor(predict_RF1), as.factor(data_test$Attrition))
 RF_Model_1_auc <- auc(as.numeric(data_test$Attrition), as.numeric(predict_RF1))
 RF_Model_1_auc
-
-# plot roc curve
-plot.roc(as.numeric(data_test$Attrition), as.numeric(predict_RF1)
-         ,  main = 'Random Forest', col='darkseagreen4', print.auc = T)
 
 # add auc results in a table 
 auc_results <- bind_rows(auc_results, 
@@ -294,12 +268,11 @@ table(smote_data$Attrition)
 
 # create data parition with 80% as training and 20% as testing
 set.seed(1, sample.kind="Rounding")
-train_indices <- createDataPartition(smote_data$Attrition 
+smote_train_indices <- createDataPartition(smote_data$Attrition 
                                      ,p = 0.8
                                      ,list = F)
-data_train <- smote_data[train_indices,]
-data_test <- smote_data[-train_indices,]
-
+smote_data_train <- smote_data[smote_train_indices,]
+smote_data_test <- smote_data[-smote_train_indices,]
 
 # MODEL 3: Random Forest using balanced dataset
 
@@ -307,25 +280,20 @@ data_test <- smote_data[-train_indices,]
 tr_control <- trainControl(method = 'cv', number = 5, classProbs = T)
 
 # fit the Random Forest Model
-RF_model_2 = train(Attrition~., data=data_train
+RF_model_2 = train(Attrition~., data=smote_data_train
                                     , method="rf"
-                                    , metric="ROC"
                                     , trControl=tr_control)
 
 
 # predict using the Random Forest Model
 predict_RF2 <- predict(RF_model_2
-          ,newdata = data_test
+          ,newdata = smote_data_test
           ,type = 'raw')
 
 # evaluate the model
-confusionMatrix(as.factor(predict_RF2), as.factor(data_test$Attrition))
-RF_Model_2_auc <- auc(as.numeric(data_test$Attrition), as.numeric(predict_RF2))
+confusionMatrix(as.factor(predict_RF2), as.factor(smote_data_test$Attrition))
+RF_Model_2_auc <- auc(as.numeric(smote_data_test$Attrition), as.numeric(predict_RF2))
 RF_Model_2_auc
-
-# plot roc curve
-plot.roc(as.numeric(data_test$Attrition), as.numeric(predict_RF2)
-         ,  main = 'Random Forest', col='darkseagreen4', print.auc = T)
 
 # add auc results in a table 
 auc_results <- bind_rows(auc_results, 
@@ -348,32 +316,39 @@ xgbm_grid <- expand.grid(
 )
 
 # fit the Extreme GBM Model
-XGBM_model = train(Attrition~., data=data_train
+XGBM_model = train(Attrition~., data=smote_data_train
                                     , method="xgbTree"
                                     , verbose = F
-                                    , metric="ROC"
                                     , trControl=tr_control
                                     , tuneGrid = xgbm_grid)
 
 # predict using the XGBM Model 
 predict_XGBM <- predict(XGBM_model
-          ,newdata = data_test
+          ,newdata = smote_data_test
   )
 
 # evaluate the model
-confusionMatrix(as.factor(predict_XGBM), as.factor(data_test$Attrition))
-xgbm_auc <- auc(as.numeric(data_test$Attrition), as.numeric(predict_XGBM))
+confusionMatrix(as.factor(predict_XGBM), as.factor(smote_data_test$Attrition))
+xgbm_auc <- auc(as.numeric(smote_data_test$Attrition), as.numeric(predict_XGBM))
 xgbm_auc
-
-# plot roc curve
-plot.roc(as.numeric(data_test$Attrition), as.numeric(predict_XGBM)
-         ,  main = 'Extreme Gradient Boost', col='darkseagreen4', print.auc = T)
 
 # add auc results to the table
 auc_results <- bind_rows(auc_results, 
                          data_frame(method="XGBM_Model",   
                                     auc = as.numeric(xgbm_auc)))
 auc_results %>% knitr::kable()
+
+# plot ROC-AUC curves
+par(pty = "s")
+plot.roc(as.numeric(data_test$Attrition), as.numeric(predict_logR)
+         ,  main = 'ROC-AUC Curve', col='darkseagreen4', print.auc = F)
+plot.roc(as.numeric(data_test$Attrition), as.numeric(predict_RF1)
+         , col='blue', print.auc = F, add = TRUE)
+plot.roc(as.numeric(smote_data_test$Attrition), as.numeric(predict_RF2)
+         , col='red', print.auc = F, add = TRUE)
+plot.roc(as.numeric(smote_data_test$Attrition), as.numeric(predict_XGBM)
+         , col='orange', print.auc = F, add = TRUE)
+legend('bottomright', c("LogR", "RF", "RF_balanced", "XGBM"), fill = c('darkseagreen4','blue','red', 'orange'), bty='n')
 
 ## Features of importance from the best model
 feat_importance <- varImp(XGBM_model)
@@ -386,7 +361,10 @@ imp_DF <- data.frame(features = row.names(feat_importance[[1]]),
 imp_DF <- arrange(imp_DF, desc(importance_val))
 
 # plot the top 10 features of importance
-ggplot(head(imp_DF, 20), aes(x = reorder(features, importance_val), y = importance_val)) +
+ggplot(head(imp_DF, 20), aes(x = reorder(features, importance_val), y = importance_val)) + 
+  ggtitle("Feature Importance for Extreme Gradient Boosting") + 
+  labs(x = "Feature Importance") + labs(y = "Value") +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15), legend.position="none")+
   geom_bar(stat = "identity", fill = 'tan4') + coord_flip()
 
 

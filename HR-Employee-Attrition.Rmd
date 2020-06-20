@@ -1,7 +1,7 @@
 ---
-title: "HR-Employee_Attrition"
+title: "HR-Employee-Attrition"
 author: "Gladys Teeson"
-date: "6/17/2020"
+date: "6/20/2020"
 output: pdf_document
 urlcolor: blue
 toc: true
@@ -13,84 +13,320 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction
 
-Employee attrition is defined as the natural process by which employees leave the workforce – for example, through resignation for personal reasons or retirement – and are not immediately replaced. But when attrition crosses a particular threshold, it becomes a cause for concern. For example, attrition among younger employees can affect the financial status of your organization via spending much costs for their training programs. Or, attrition among senior leaders can lead to a significant gap in organizational leadership. The attrition can also reduce the strength of workforce and increase the work load for remaining employees. So it is important to know where your company stands on the employee attrition curve.
+Employee attrition is defined as the natural process by which employees leave the workforce – for example, through resignation for personal reasons or retirement – and are not immediately replaced. But when attrition crosses a particular threshold, it becomes a cause for concern. For example, attrition among younger employees can affect the financial status of an organization via spending much costs for their training programs. Or, attrition among senior leaders can lead to a significant gap in organizational leadership. The attrition can also reduce the strength of workforce and increase the work load for remaining employees. So it is important to know where an organization stands on the employee attrition curve.
 
-For this project, we will be uncovering the factors that lead to employee attrition using the dataset created by IBM data scientists.  The objective of this project is to model an algorithm that could generate new insights for the business on what drives attrition. 
+For this project, we will be uncovering the factors that lead to employee attrition using the dataset created by IBM data scientists. The objective of this project is to model machine learning algorithms that could generate new insights for the business on what drives attrition and the leading factors. We will finally evaluate the performance of the models using AUC(Area under the ROC curve).
+
+# IBM Employee Attrtion Dataset
 
 ## Load Libraries
 
+```{r libraries, message=FALSE, warning=FALSE, eval = TRUE}
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(arules)) install.packages("arules", repos = "http://cran.us.r-project.org")
+if(!require(corrplot)) install.packages("corrplot", repos = "http://cran.us.r-project.org")
+if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(pROC)) install.packages("pROC", repos = "http://cran.us.r-project.org")
+if(!require(xgboost)) install.packages("xgboost", repos = "http://cran.us.r-project.org")
+if(!require(DMwR)) install.packages("DMwR", repos = "http://cran.us.r-project.org")
+
+```
+
 ## Import Dataset
+
+```{r data source, message=FALSE, warning=FALSE, eval = TRUE}
+#IBM Dataset
+#https://www.kaggle.com/pavansubhasht/ibm-hr-analytics-attrition-dataset
+
+## Import the dataset 
+data = read.csv("https://raw.githubusercontent.com/gladysteeson/HR-Employee-Attrition/master/HR-Employee-Attrition.csv") 
+
+# structure of the dataset
+str(data)
+
+# number of rows and columns in the dataset
+dim(data)
+
+```
 
 The IBM dataset contains 1470 rows and 35 columns with each row representing information about employees.
 
+
 ## Data Pre-procesing  
-We can see a peek at the first 5 rows of the data:
 
 We will check for any missing values in the dataset.
+
+```{r NA values, warning = FALSE, message = FALSE}
+# check for NA/missing values
+sum(is.na(data))
+```
+
 The sum comes out to be zero which indicates that there are no NA values.
 
+
 We will check for any duplicate entries in the dataset too.
+
+```{r duplicate entries, warning = FALSE, message = FALSE}
+# check for Duplicate entries
+nrow(data[!(duplicated(data)),])
+nrow(data)
+```
+
 We can see that all the rows are unique here.
 
-In the dataset, we notice that some columns have the same value for all employees. We can delete these columns.
 
-We can also delete the columns which are irrelevant to the modeling.
+In the dataset, we notice that some columns have the same value for all employees. We can delete these columns and some irrelevant columns too.
+
+```{r remove columns, warning = FALSE, message = FALSE}
+# remove columns which have same value for all
+data$EmployeeCount <- NULL
+data$StandardHours <- NULL
+data$Over18 <- NULL
+
+# remove irrelevant columns 
+data$EmployeeNumber <- NULL
+data$DailyRate <- NULL
+```
 
 Now we have a dataset with 30 columns.
 
+```{r data dimensions, warning = FALSE, message = FALSE}
+# current number of rows and columns in the dataset
+dim(data)
+```
+
 ## Exploratory Data Analysis
 
-Let's look athe distribution of the gender and age of the employees in the dataset.
+We can explore the relationships between Attrition and other variables and try to understand if any particular pattern exists.
 
-Now, we can explore the relationship between Attrition and other variables and try to understand if any pattern exists.
+### Attrition by Age 
 
-First, we will look at the range of age of the employees who leave the company the most.
+```{r Age-Attrition, warning = FALSE, message = FALSE}
+# Attrition by Age 
+ggplot(data, aes(x=Age, fill=Attrition, color=Attrition)) +
+  geom_density(position="identity", alpha=0.5) + 
+  theme_bw() + 
+  scale_fill_manual(values=c("chartreuse4", "brown2")) +
+  scale_color_manual(values=c("chartreuse4", "brown2")) +
+  ggtitle("Density plot of Age") + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15), legend.position="bottom") +
+  labs(x = "Age") 
+```
 
 We can see that the attrition among the young employees are more than the senior employees.
 
-Let's look how Gender effects the attrition.
+### Gender by Attrition
+
+```{r Gender-Attrition, warning = FALSE, message = FALSE}
+# Gender distribution by Attrition
+data %>% group_by(Attrition, Gender) %>% summarize(N = n()) %>% mutate(countT = sum(N)) %>%
+  group_by(Attrition, Gender, add=TRUE) %>% mutate(per=paste0(round(100*N/countT,1),'%')) %>%
+  ggplot(aes(x=Attrition, y=N, fill=Gender)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  theme_bw() + 
+  scale_fill_brewer(palette="Set2") +
+  geom_text(aes(label = per), size = 4, vjust = 1.2, color = "#FFFFFF", position = position_dodge(0.9)) + 
+  ggtitle("Gender by Attrition") + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15)) +
+  labs(x = "Attrition", y = "Count")
+```
 
 We can see that males are leaving the company the most.
 
 
-Travel
+### Business Travel by Attrition
+
+```{r Travel-Attrition, warning = FALSE, message = FALSE}
+# Business Travel frequency distribution by Attrition 
+ggplot(data,aes(Attrition,BusinessTravel,color=Attrition))+geom_jitter() + scale_color_manual(values=c("chartreuse4", "brown2")) 
+```
+
+It seems that Travel dosent have a high impact on Attrtion rates.
+
+### Monthly Income by Attrition
+
+```{r Income-Attrition, warning = FALSE, message = FALSE}
+# Monthly Income distribution by Attrition 
+ggplot(data, aes(x=MonthlyIncome, fill=Attrition, color=Attrition)) +
+  geom_density(position="identity", alpha=0.5) + 
+  theme_bw() + 
+  scale_fill_manual(values=c("chartreuse4", "brown2")) +
+  scale_color_manual(values=c("chartreuse4", "brown2")) +
+  ggtitle("Density plot of Monthly Income") + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15), legend.position="bottom") +
+  labs(x = "MonthlyIncome") 
+```
 
 Employees with low monthly income tend to leave the company the most.
 
+### Attrition by Monthly Income and Department
 
-Employees with job level 4 & 5 show least attrition.
+```{r Dept-Attrition-Income, warning = FALSE, message = FALSE}
+# Attrition by Monthly Income and Department
+ggplot(data,aes(MonthlyIncome,Department, color=Attrition))+geom_point() + scale_color_manual(values=c("chartreuse4", "brown2"))
+```
 
-Department
+Sales department shows the high attrition rate.
 
-Employees with less travelling distance seem to quit the job more.
+### Attrition by Monthly Income and Job Role
+
+```{r Role-Attrition-Income, warning = FALSE, message = FALSE}
+# Attrition by Monthly Income and Job Role
+ggplot(data,aes(MonthlyIncome,JobRole, color=Attrition))+geom_point() + scale_color_manual(values=c("chartreuse4", "brown2"))
+```
+
+Sales Employees with low monthly income seems to leave the company the most.
+
+### Job Levels by Attrition
+
+```{r JobLevels-Attrition, warning = FALSE, message = FALSE}
+# Job Levels by Attrition 
+ggplot(data, aes(x=Attrition, y=JobLevel, color=Attrition, fill=Attrition)) +
+  geom_boxplot() + 
+  theme_bw() + 
+  scale_fill_manual(values=c("chartreuse4", "brown2")) +
+  scale_color_manual(values=c("#040242", "#040242")) +
+  ggtitle("Job Level by Attrition") + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15)) +
+  labs(x = "Attrition", y = "Job Level")
+```
+
+Employees with job level 4 & 5 show the least attrition.
+
+### Attrition by Distance From Home
+
+```{r Distance-Attrition, warning = FALSE, message = FALSE}
+# Attrition by Distance From Home
+ggplot(data, aes(x=DistanceFromHome, fill=Attrition, color=Attrition)) +
+  geom_density(position="identity", alpha=0.5) + 
+  theme_bw() + 
+  scale_fill_manual(values=c("chartreuse4", "brown2")) +
+  scale_color_manual(values=c("chartreuse4", "brown2")) +
+  ggtitle("Density plot of Distance From Home") + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15), legend.position="bottom") +
+  labs(x = "Distance From Home") 
+```
+
+Employees with less travelling distance from home seem to quit the job more.
+
+### Job Satisfaction by Attrition
+
+```{r JobSatisfaction-Attrition, warning = FALSE, message = FALSE}
+# Job Satisfaction by Attrition
+ggplot(data, aes(x=Attrition, y=JobSatisfaction, color=Attrition, fill=Attrition)) +
+  geom_boxplot() + 
+  theme_bw() + 
+  scale_fill_manual(values=c("chartreuse4", "brown2")) +
+  scale_color_manual(values=c("#040242", "#040242")) +
+  ggtitle("Job Satisfaction by Attrition") + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15)) +
+  labs(x = "Attrition", y = "Job Satisfaction")
+```
 
 Employees with lower job satisfaction left the company the most.
 
+### Marital Status by Attrition
+
+```{r MaritalStatus-Attrition, warning = FALSE, message = FALSE}
+# Marital Status by Attrition
+data %>% group_by(Attrition, MaritalStatus) %>% summarize(N = n()) %>% mutate(countT = sum(N)) %>%
+  group_by(Attrition, MaritalStatus, add=TRUE) %>% mutate(per=paste0(round(100*N/countT,1),'%')) %>%
+  ggplot(aes(x=Attrition, y=N, fill=MaritalStatus)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  theme_bw() + 
+  scale_fill_brewer(palette="Set2") +
+  geom_text(aes(label = per), size = 4, vjust = 1.2, color = "#FFFFFF", position = position_dodge(0.9)) + 
+  ggtitle("MaritalStatus by Attrition") + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15)) +
+  labs(x = "Attrition", y = "Count")
+```
 
 We can see that employees who are single left the company the most.
 
-A larger proportion of overtime employees has left the company.
+### Over Time by Attrition
+
+```{r OverTime-Attrition, warning = FALSE, message = FALSE}
+# Over Time worked by Attrition
+data %>% group_by(Attrition, OverTime) %>% summarize(N = n()) %>% mutate(countT = sum(N)) %>%
+  group_by(Attrition, OverTime, add=TRUE) %>% mutate(per=paste0(round(100*N/countT,1),'%')) %>%
+  ggplot(aes(x=Attrition, y=N, fill=OverTime)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  theme_bw() + 
+  scale_fill_brewer(palette="Set2") +
+  geom_text(aes(label = per), size = 4, vjust = 1.2, color = "#FFFFFF", position = position_dodge(0.9)) + 
+  ggtitle("Over Time by Attrition") + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15)) +
+  labs(x = "Attrition", y = "Count")
+```
+
+A larger proportion of employees who worked overtime has left the company.
+
+### Attrition by Years At Company
+
+```{r YearsAtCompany-Attrition, warning = FALSE, message = FALSE}
+# Attrition by Years At Company
+ggplot(data, aes(x=YearsAtCompany, fill=Attrition, color=Attrition)) +
+  geom_density(position="identity", alpha=0.5) + 
+  theme_bw() + 
+  scale_fill_manual(values=c("chartreuse4", "brown2")) +
+  scale_color_manual(values=c("chartreuse4", "brown2")) +
+  ggtitle("Density plot of Years At Company") + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15), legend.position="bottom") +
+  labs(x = "Years At Company") 
+```
+
+Employees who have spent 10 years or more in the company have the least tendency of leaving.
+
 
 A correlation plot is also plotted using the corrplot function to visualize the correlation among the attributes.
 
+```{r correlation, warning = FALSE, message = FALSE}
+# correlation between the attributes
+corrplot(cor(sapply(data,as.integer)),method = "color")
+```
+
 ## Data Transformation
 
-We wil dscretize the variables now. In this way, the number of values for a given continuous attribute is reduced by dividing the attribute into a range of values. The actual data values are replaced with interval value labels. Machine-learning algorithms are typically recursive; to process large amounts of data a great deal of time is spent to sort the data at every step. It is clear that the smaller the number of distinct values to be ordered, the faster these methods should be. That is why these techniques are particularly beneficial.
+We will convert all the variables to numerical but keeping the target variable Attrition as factor.
 
-Let's look at the structure of our dataset again. We can see that some of the datatypes of the variables are not categorical. We can convert the variables to categorical as below:
+```{r numeric, warning = FALSE, message = FALSE}
+# convert every variables into numeric
+data <- data %>% mutate_if(is.factor, as.integer)
 
-It can be observed that all the columns are converted into categorical type.
+# convert the target variable Attrition to factor 
+data$Attrition=ifelse(data$Attrition==1,"No","Yes")
+data$Attrition <- factor(data$Attrition)
+```
+
+We can see the types of all the attributes as:
+
+```{r types, warning = FALSE, message = FALSE}
+# list types for each attribute
+sapply(data, class)
+```
+
+It can be observed that all the attributes are converted into numerical type except Attrition.
 
 
+## Split Data into Train and Test Sets
 
+We will split our dataset into train set and test set. 80% of our data will be the train set and the rest 20% will be our test set.
 
+```{r data splitting, warning = FALSE, message = FALSE}
+## Create data parition with 80% as training and 20% as testing
+set.seed(1, sample.kind="Rounding")
+train_indices <- createDataPartition(data$Attrition 
+                                     ,p = 0.8
+                                     ,list = F)
+data_train <- data[train_indices,]
+data_test <- data[-train_indices,]
+```
 
+# Machine Learning Data Models
 
-## Generate Train and Test Sets
-
-We will split our balanced dataset into train set and test set. 80% of our data will be the train set and the rest 20% will be our test set.
-
-# Data Modelling
+## AUC - Area Under Curve
 
 We are going to plot the ROC curve and calculate the AUC (area under the curve) which are typical performance measurements for a binary classifier.
 The ROC is a curve generated by plotting the true positive rate (TPR) against the false positive rate (FPR) at various threshold settings while the AUC is the area under the ROC curve. As a rule of thumb, a model with good predictive ability should have an AUC closer to 1 (1 is ideal) than to 0.5
@@ -104,35 +340,276 @@ To test the data we will use the inbuilt predict function.
 Logistic regression is a method for fitting a regression curve, y = f(x), when y is a categorical variable. The typical use of this model is predicting y given a set of predictors x. The predictors can be continuous, categorical or a mix of both.
 the glm() function, which is generally used to fit generalized linear models, will be used to fit the logistic regression model.
 
-We will now create a results table to add this accuracy. We will continue to add the accuracies of different models to this same results table.
+```{r Logistic Regression, warning = FALSE, message = FALSE}
+# MODEL 1: Logistic Regression
+
+# define the cross validation
+tr_control <- trainControl(method = 'cv', number = 5, classProbs = T)
+
+# fit Logistic regression Model
+logR_model = train(Attrition~., data=data_train
+                     , method="glm"
+                     , family = "binomial"
+                     , trControl=tr_control)
+
+# predict using the Logistic Regression Model
+predict_logR <- predict(logR_model
+                         ,newdata = data_test
+                         ,type = 'raw')
+
+# evaluate the model
+confusionMatrix(as.factor(predict_logR), as.factor(data_test$Attrition))
+LogR_Model_auc <- auc(as.numeric(data_test$Attrition), as.numeric(predict_logR))
+LogR_Model_auc
+```
+
+We will now create a results table to add this AUC. We will continue to add the AUC's of different models to this same results table.
+
+```{r Results, warning = FALSE, message = FALSE}
+# add auc results in a table 
+auc_results <- data.frame(method = "LogR_Model", auc = as.numeric(LogR_Model_auc)) 
+auc_results %>% knitr::kable() 
+```
+
+We have obtained AUC of 0.66  with this model. Let's look into other models for a better AUC.
 
 ## Model 2: Random Forest
 
 Random forests are a modification of bagged decision trees that build a large collection of de-correlated trees to further improve predictive performance. 
 
-## use SMOTE to create balanced dataset
+```{r Random Forest, warning = FALSE, message = FALSE}
+# MODEL 2: Random Forest
 
-Attrition Distribution
+# define the cross validation
+tr_control <- trainControl(method = 'cv', number = 5, classProbs = T)
 
-When we look the attrition distribution, we can see that more people stayed in the company than the people who left the company. 
+# fit the Basic Random Forest Model
+RF_model_1 = train(Attrition~., data=data_train
+                   , method="rf"
+                   , trControl=tr_control)
 
- This makes the dataset imbalanced. An imbalanced data refers to classification problems where one class outnumbers other class by a substantial proportion.An inbalanced dataset will bias the prediction model towards the more common class.Imbalanced data can have a significant impact on model predictions and performance.
- 
-A combination of over- and under-sampling is often successful and a common approach is known as Synthetic Minority Over-Sampling Technique, or SMOTE.
+
+# predict using the Basic Random Forest Model
+predict_RF1 <- predict(RF_model_1
+                       ,newdata = data_test
+                       ,type = 'raw')
+
+# evaluate the model
+confusionMatrix(as.factor(predict_RF1), as.factor(data_test$Attrition))
+RF_Model_1_auc <- auc(as.numeric(data_test$Attrition), as.numeric(predict_RF1))
+RF_Model_1_auc
+
+# add auc results in a table 
+auc_results <- bind_rows(auc_results, 
+                         data_frame(method="RF_Model",   
+                                    auc = as.numeric(RF_Model_1_auc)))
+auc_results %>% knitr::kable()
+```
+
+The AUC with this model is around 0.65. The AUC is not improved from the previous model.
+
+When we look the attrition distribution in the dataset, we see that more people stayed in the company than the people who left the company. That means, our dataset is an imbalanced dataset.
+
+```{r Imbalanced Data, warning = FALSE, message = FALSE}
+# Attrition Distribution
+#1. Get the attrition class count
+attrition_count <- table(data$Attrition)
+attrition_count
+```
+
+A data set that exhibits an unequal distribution between its classes is considered to be imbalanced. An imbalanced dataset will bias the prediction model towards the more common class. So we will make our dataset balanced to improve the performance of the models.
+
+## SMOTE to create balanced dataset
+
+A combination of over- and under-sampling is often successful to balance a dataset and a common approach is Synthetic Minority Over-Sampling Technique, or SMOTE.
 So, we will use the function SMOTE to make our imbalanced dataset to a balanced one.
 
-We can see that our dataset is now balanced:
+```{r SMOTE function, warning = FALSE, message = FALSE}
+## use SMOTE to create balanced dataset
 
-## Model 2: Random Forest
+#1. Get the attrition class count
+attrition_count <- table(data$Attrition)
+attrition_count
 
-## Model 3: Extreme Gradient Boosting
+#2. Compute oversampling
+over_count <- ((0.6 * max(attrition_count)) - min(attrition_count)) / min(attrition_count)
 
+#3. Compute under sampling
+under_count <- (0.4 * max(attrition_count)) / (min(attrition_count) * over_count)
+
+over <- round(over_count,1) * 100
+under <- round(under_count, 1) * 100
+
+smote_data <-   SMOTE(Attrition ~.
+                              ,data
+                              ,perc.over = over
+                              , k = 5
+                              , perc.under = under)
+
+```
+
+We can see that our dataset is now balanced.
+
+```{r Balanced Data, warning = FALSE, message = FALSE}
+# check the balanced dataset
+table(smote_data$Attrition)
+```
+
+## Split Balanced Data into Train and Test Sets
+
+```{r Balanced Data Splitting, warning = FALSE, message = FALSE}
+# create data parition with 80% as training and 20% as testing
+set.seed(1, sample.kind="Rounding")
+smote_train_indices <- createDataPartition(smote_data$Attrition 
+                                     ,p = 0.8
+                                     ,list = F)
+smote_data_train <- smote_data[smote_train_indices,]
+smote_data_test <- smote_data[-smote_train_indices,]
+```
+
+## Model 3: Random Forest using balanced dataset
+
+```{r RF-balanced, warning = FALSE, message = FALSE}
+# MODEL 3: Random Forest using balanced dataset
+
+# define the cross validation
+tr_control <- trainControl(method = 'cv', number = 5, classProbs = T)
+
+# fit the Random Forest Model
+RF_model_2 = train(Attrition~., data=smote_data_train
+                                    , method="rf"
+                                    , trControl=tr_control)
+
+
+# predict using the Random Forest Model
+predict_RF2 <- predict(RF_model_2
+          ,newdata = smote_data_test
+          ,type = 'raw')
+
+# evaluate the model
+confusionMatrix(as.factor(predict_RF2), as.factor(smote_data_test$Attrition))
+RF_Model_2_auc <- auc(as.numeric(smote_data_test$Attrition), as.numeric(predict_RF2))
+RF_Model_2_auc
+
+# add auc results in a table 
+auc_results <- bind_rows(auc_results, 
+                         data_frame(method="RF_Model_balanced",   
+                                    auc = as.numeric(RF_Model_2_auc)))
+auc_results %>% knitr::kable()
+```
+
+The AUC of the Random Forest model has increased tremendously after making the dataset balanced. 
+
+## Model 4: Extreme Gradient Boosting using balanced dataset
+
+Extreme Gradient Boosting (xgboost) is similar to gradient boosting framework but more efficient. It has both linear model solver and tree learning algorithms and a capacity to do parallel computation on a single machine.
+
+```{r XGBM-Balanced, warning = FALSE, message = FALSE}
+# MODEL 4: Extreme Gradient Boosting using balanced dataset
+
+# define the cross validation
+tr_control <- trainControl(method = 'cv', number = 5, classProbs = T)
+xgbm_grid <- expand.grid(
+  max_depth = 12
+  , subsample = 0.9
+  , nrounds  = 200
+  , gamma  = 0.01
+  , colsample_bytree = 0.5
+  , min_child_weight = 1
+  , eta = 0.02
+)
+
+# fit the Extreme GBM Model
+XGBM_model = train(Attrition~., data=smote_data_train
+                                    , method="xgbTree"
+                                    , verbose = F
+                                    , trControl=tr_control
+                                    , tuneGrid = xgbm_grid)
+
+# predict using the XGBM Model 
+predict_XGBM <- predict(XGBM_model
+          ,newdata = smote_data_test
+  )
+
+# evaluate the model
+confusionMatrix(as.factor(predict_XGBM), as.factor(smote_data_test$Attrition))
+xgbm_auc <- auc(as.numeric(smote_data_test$Attrition), as.numeric(predict_XGBM))
+xgbm_auc
+
+# add auc results to the table
+auc_results <- bind_rows(auc_results, 
+                         data_frame(method="XGBM_Model",   
+                                    auc = as.numeric(xgbm_auc)))
+auc_results %>% knitr::kable()
+
+```
+
+We have attained an AUC of 0.879 with this model.
+
+Further, the Extreme Gradient Boosting model provides the estimates of feature importance from the trained predictive model. The model can retrieve importance scores for each attribute.
+
+
+``` {r importance features, message = FALSE, warning = FALSE, echo = FALSE} 
+## Features of importance from the best model
+feat_importance <- varImp(XGBM_model)
+
+imp_DF <- data.frame(features = row.names(feat_importance[[1]]),
+                     importance_val =  round(feat_importance[[1]]$Overall, 2)
+                     
+) 
+
+imp_DF <- arrange(imp_DF, desc(importance_val))
+
+# plot the top 10 features of importance
+ggplot(head(imp_DF, 20), aes(x = reorder(features, importance_val), y = importance_val)) + 
+  ggtitle("Feature Importance for Extreme Gradient Boosting") + 
+  labs(x = "Feature Importance") + labs(y = "Value") +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 15), legend.position="none")+
+  geom_bar(stat = "identity", fill = 'tan4') + coord_flip()
+```
+
+The Feature Importance of Extreme Gradient Boosting indicates that the attributes OverTime, JobLevel, Age, StockOptionLevel and MonthlyIncome played an important role in determining the attrition.
 
 # Results 
 
+We can inspect the AUCs for the various models trained as follows: 
+ 
+``` {r auc-results, message = FALSE, warning = FALSE, echo = FALSE} 
+ auc_results %>% knitr::kable() 
+
+# plot ROC-AUC curves
+par(pty = "s")
+plot.roc(as.numeric(data_test$Attrition), as.numeric(predict_logR)
+         ,  main = 'ROC-AUC Curve', col='darkseagreen4', print.auc = F)
+plot.roc(as.numeric(data_test$Attrition), as.numeric(predict_RF1)
+         , col='blue', print.auc = F, add = TRUE)
+plot.roc(as.numeric(smote_data_test$Attrition), as.numeric(predict_RF2)
+         , col='red', print.auc = F, add = TRUE)
+plot.roc(as.numeric(smote_data_test$Attrition), as.numeric(predict_XGBM)
+         , col='orange', print.auc = F, add = TRUE)
+legend('bottomright', c("LogR", "RF", "RF_balanced", "XGBM"), fill = c('darkseagreen4','blue','red', 'orange'), bty='n')
+ 
+```
+
+From this, we can infer that the AUCs of each model is an improvement from the previous models and the Extreme Gradient Boosting model has the highest AUC of about approximately 0.88.
+
+
 # Conclusion 
+
+We implemented four data models to uncover the factors that lead to employee attrition. The highest AUC was achieved with the Extreme Gradient Boosting model and the AUCs of the models improved as we balanced the data. Further, the Extreme Gradient Boosting model also helped listing out the driving factors for attrition. An organization can thus reduce the employee attrition rate by focusing their attention on these key factors.
+
 
 ## Future Impovement
 
+Further improvements in the AUCs can be achieved by ensembling methods through combining the results from well performing models. Also, the inclusion of attrition timeline, demographic information etc. can further help to draw additional inferences.
+
+
 ### References 
+
+ * https://rafalab.github.io/dsbook/introduction-to-machine-learning.html
+ 
+ * https://www.kaggle.com/pavansubhasht/ibm-hr-analytics-attrition-dataset
+
+ 
+ 
 
