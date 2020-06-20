@@ -13,11 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction
 
-Employee attrition is defined as the natural process by which employees leave the workforce – for example, through resignation for personal reasons or retirement – and are not immediately replaced. Attrition is an inevitable part of any business. There will come a time when an employee wants to leave your company – for either personal or professional reasons. Employees are leaving the workforce faster than they are hired, and it is often outside the employer’s control.
+Employee attrition is defined as the natural process by which employees leave the workforce – for example, through resignation for personal reasons or retirement – and are not immediately replaced. But when attrition crosses a particular threshold, it becomes a cause for concern. For example, attrition among younger employees can affect the financial status of your organization via spending much costs for their training programs. Or, attrition among senior leaders can lead to a significant gap in organizational leadership. The attrition can also reduce the strength of workforce and increase the work load for remaining employees. So it is important to know where your company stands on the employee attrition curve.
 
-But when attrition crosses a particular threshold, it becomes a cause for concern. For example, attrition among minority employee groups could be hurting diversity at your organization. Or, attrition among senior leaders can lead to a significant gap in organizational leadership. So it is important to know where your company stands on the employee attrition curve.
-
-For this project, we will be uncovering the factors that lead to employee attrition using dataset created by IBM data scientists.  The objective is to model an algorithm that could generate new insights for the business on what drives attrition.
+For this project, we will be uncovering the factors that lead to employee attrition using the dataset created by IBM data scientists.  The objective of this project is to model an algorithm that could generate new insights for the business on what drives attrition. 
 
 ## Load Libraries
 
@@ -25,13 +23,26 @@ For this project, we will be uncovering the factors that lead to employee attrit
 
 The IBM dataset contains 1470 rows and 35 columns with each row representing information about employees.
 
+## Data Pre-procesing  
+We can see a peek at the first 5 rows of the data:
+
 We will check for any missing values in the dataset.
 The sum comes out to be zero which indicates that there are no NA values.
 
 We will check for any duplicate entries in the dataset too.
 We can see that all the rows are unique here.
 
+In the dataset, we notice that some columns have the same value for all employees. We can delete these columns.
+
+We can also delete the columns which are irrelevant to the modeling.
+
+Now we have a dataset with 30 columns.
+
 ## Exploratory Data Analysis
+
+Let's look athe distribution of the gender and age of the employees in the dataset.
+
+Now, we can explore the relationship between Attrition and other variables and try to understand if any pattern exists.
 
 First, we will look at the range of age of the employees who leave the company the most.
 
@@ -60,12 +71,9 @@ We can see that employees who are single left the company the most.
 
 A larger proportion of overtime employees has left the company.
 
-In the dataset, we notice that some columns have the same value for all employees. We can delete these columns.
+A correlation plot is also plotted using the corrplot function to visualize the correlation among the attributes.
 
-We can also delete the columns which are irrelevant to the modeling.
-
-Now we have a dataset with 30 columns.
-
+## Data Transformation
 
 We wil dscretize the variables now. In this way, the number of values for a given continuous attribute is reduced by dividing the attribute into a range of values. The actual data values are replaced with interval value labels. Machine-learning algorithms are typically recursive; to process large amounts of data a great deal of time is spent to sort the data at every step. It is clear that the smaller the number of distinct values to be ordered, the faster these methods should be. That is why these techniques are particularly beneficial.
 
@@ -74,30 +82,57 @@ Let's look at the structure of our dataset again. We can see that some of the da
 It can be observed that all the columns are converted into categorical type.
 
 
-A correlation plot is also plotted using the corrplot function to visualize the correlation among the attributes.
 
-Attrition Distribution
 
-When we look the attrition distribution, we can see that more people stayed in the company than the people who left the company. 
 
-This makes the dataset imbalanced. An imbalanced data refers to classification problems where one class outnumbers other class by a substantial proportion.An inbalanced dataset will bias the prediction model towards the more common class.
-
-So, we will use the function SMOTE to make our imbalanced dataset to a balanced one.
-
-We can see that our dataset is now balanced:
 
 ## Generate Train and Test Sets
 
 We will split our balanced dataset into train set and test set. 80% of our data will be the train set and the rest 20% will be our test set.
 
-# Machine Learning Data Models
+# Data Modelling
+
+We are going to plot the ROC curve and calculate the AUC (area under the curve) which are typical performance measurements for a binary classifier.
+The ROC is a curve generated by plotting the true positive rate (TPR) against the false positive rate (FPR) at various threshold settings while the AUC is the area under the ROC curve. As a rule of thumb, a model with good predictive ability should have an AUC closer to 1 (1 is ideal) than to 0.5
+
+We’ll use caret::train() to fit the models and provide a method to implement the corresponding model. To modify the resampling method, a trainControl function is used. The option method controls the type of resampling. Here we will use 5 fold cross validation method.
+
+To test the data we will use the inbuilt predict function.
 
 ## Model 1: Logistic Regression
 
-
+Logistic regression is a method for fitting a regression curve, y = f(x), when y is a categorical variable. The typical use of this model is predicting y given a set of predictors x. The predictors can be continuous, categorical or a mix of both.
+the glm() function, which is generally used to fit generalized linear models, will be used to fit the logistic regression model.
 
 We will now create a results table to add this accuracy. We will continue to add the accuracies of different models to this same results table.
 
 ## Model 2: Random Forest
 
+Random forests are a modification of bagged decision trees that build a large collection of de-correlated trees to further improve predictive performance. 
+
+## use SMOTE to create balanced dataset
+
+Attrition Distribution
+
+When we look the attrition distribution, we can see that more people stayed in the company than the people who left the company. 
+
+ This makes the dataset imbalanced. An imbalanced data refers to classification problems where one class outnumbers other class by a substantial proportion.An inbalanced dataset will bias the prediction model towards the more common class.Imbalanced data can have a significant impact on model predictions and performance.
+ 
+A combination of over- and under-sampling is often successful and a common approach is known as Synthetic Minority Over-Sampling Technique, or SMOTE.
+So, we will use the function SMOTE to make our imbalanced dataset to a balanced one.
+
+We can see that our dataset is now balanced:
+
+## Model 2: Random Forest
+
 ## Model 3: Extreme Gradient Boosting
+
+
+# Results 
+
+# Conclusion 
+
+## Future Impovement
+
+### References 
+
